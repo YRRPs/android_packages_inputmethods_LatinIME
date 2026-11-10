@@ -39,6 +39,9 @@ public final class MultilingualDiagnostics {
         mSelection = selection;
         mLastSuggestionMs = 0;
         mMaxSuggestionMs = 0;
+        if (selection.selectorFailed()) {
+            record(MultilingualEvent.SELECTOR_FAILED, selection.main());
+        }
         record(MultilingualEvent.LANGUAGE_SET_REBUILT, selection.main());
     }
 

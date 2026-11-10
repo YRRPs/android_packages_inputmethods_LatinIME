@@ -95,4 +95,13 @@ public class MultilingualDiagnosticsTest {
         assertTrue(dump, dump.contains("+5ms PREFERRED_CHANGED"));
         assertTrue(dump, dump.contains("+68ms PREFERRED_CHANGED"));
     }
+
+    @Test
+    public void failedSelectionRecordsSelectorFailure() {
+        final MultilingualDiagnostics d = newDiagnostics();
+        d.setSelection(LocaleSelection.failed(FR));
+        final String dump = emptyDump(d);
+        assertTrue(dump, dump.contains("SELECTOR_FAILED fr"));
+        assertTrue(dump, dump.contains("skipped=fr:selectorFailed"));
+    }
 }
