@@ -45,7 +45,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
@@ -113,108 +112,6 @@ public class DictionaryFacilitatorImpl implements DictionaryFacilitator {
         return TextUtils.equals(mDictionaryGroup.mAccount, account);
     }
 
-    /**
-     * A group of dictionaries that work together for a single language.
-     */
-    private static class DictionaryGroup {
-        // TODO: Add null analysis annotations.
-        // TODO: Run evaluation to determine a reasonable value for these constants. The current
-        // values are ad-hoc and chosen without any particular care or methodology.
-        public static final float WEIGHT_FOR_MOST_PROBABLE_LANGUAGE = 1.0f;
-        public static final float WEIGHT_FOR_GESTURING_IN_NOT_MOST_PROBABLE_LANGUAGE = 0.95f;
-        public static final float WEIGHT_FOR_TYPING_IN_NOT_MOST_PROBABLE_LANGUAGE = 0.6f;
-
-        /**
-         * The locale associated with the dictionary group.
-         */
-        @Nullable public final Locale mLocale;
-
-        /**
-         * The user account associated with the dictionary group.
-         */
-        @Nullable public final String mAccount;
-
-        @Nullable private Dictionary mMainDict;
-        // Confidence that the most probable language is actually the language the user is
-        // typing in. For now, this is simply the number of times a word from this language
-        // has been committed in a row.
-        private int mConfidence = 0;
-
-        public float mWeightForTypingInLocale = WEIGHT_FOR_MOST_PROBABLE_LANGUAGE;
-        public float mWeightForGesturingInLocale = WEIGHT_FOR_MOST_PROBABLE_LANGUAGE;
-        public final ConcurrentHashMap<String, ExpandableBinaryDictionary> mSubDictMap =
-                new ConcurrentHashMap<>();
-
-        public DictionaryGroup() {
-            this(null /* locale */, null /* mainDict */, null /* account */,
-                    Collections.<String, ExpandableBinaryDictionary>emptyMap() /* subDicts */);
-        }
-
-        public DictionaryGroup(@Nullable final Locale locale,
-                @Nullable final Dictionary mainDict,
-                @Nullable final String account,
-                final Map<String, ExpandableBinaryDictionary> subDicts) {
-            mLocale = locale;
-            mAccount = account;
-            // The main dictionary can be asynchronously loaded.
-            setMainDict(mainDict);
-            for (final Map.Entry<String, ExpandableBinaryDictionary> entry : subDicts.entrySet()) {
-                setSubDict(entry.getKey(), entry.getValue());
-            }
-        }
-
-        private void setSubDict(final String dictType, final ExpandableBinaryDictionary dict) {
-            if (dict != null) {
-                mSubDictMap.put(dictType, dict);
-            }
-        }
-
-        public void setMainDict(final Dictionary mainDict) {
-            // Close old dictionary if exists. Main dictionary can be assigned multiple times.
-            final Dictionary oldDict = mMainDict;
-            mMainDict = mainDict;
-            if (oldDict != null && mainDict != oldDict) {
-                oldDict.close();
-            }
-        }
-
-        public Dictionary getDict(final String dictType) {
-            if (Dictionary.TYPE_MAIN.equals(dictType)) {
-                return mMainDict;
-            }
-            return getSubDict(dictType);
-        }
-
-        public ExpandableBinaryDictionary getSubDict(final String dictType) {
-            return mSubDictMap.get(dictType);
-        }
-
-        public boolean hasDict(final String dictType, @Nullable final String account) {
-            if (Dictionary.TYPE_MAIN.equals(dictType)) {
-                return mMainDict != null;
-            }
-            if (Dictionary.TYPE_USER_HISTORY.equals(dictType) &&
-                    !TextUtils.equals(account, mAccount)) {
-                // If the dictionary type is user history, & if the account doesn't match,
-                // return immediately. If the account matches, continue looking it up in the
-                // sub dictionary map.
-                return false;
-            }
-            return mSubDictMap.containsKey(dictType);
-        }
-
-        public void closeDict(final String dictType) {
-            final Dictionary dict;
-            if (Dictionary.TYPE_MAIN.equals(dictType)) {
-                dict = mMainDict;
-            } else {
-                dict = mSubDictMap.remove(dictType);
-            }
-            if (dict != null) {
-                dict.close();
-            }
-        }
-    }
 
     public DictionaryFacilitatorImpl() {
     }
