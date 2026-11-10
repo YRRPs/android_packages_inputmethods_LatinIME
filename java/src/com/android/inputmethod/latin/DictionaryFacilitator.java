@@ -22,6 +22,7 @@ import android.util.LruCache;
 import com.android.inputmethod.annotations.UsedForTesting;
 import com.android.inputmethod.keyboard.Keyboard;
 import com.android.inputmethod.latin.common.ComposedData;
+import com.android.inputmethod.latin.multilingual.LocaleSelection;
 import com.android.inputmethod.latin.settings.SettingsValuesForSuggestion;
 import com.android.inputmethod.latin.utils.SuggestionResults;
 
@@ -120,6 +121,23 @@ public interface DictionaryFacilitator {
             @Nullable final String account,
             final String dictNamePrefix,
             @Nullable final DictionaryInitializationListener listener);
+
+    /**
+     * Loads dictionaries for every language of the selection, main language first. Suggestions,
+     * autocorrection and learning then consider all of them.
+     */
+    void resetDictionaries(
+            final Context context,
+            final LocaleSelection selection,
+            final boolean useContactsDict,
+            final boolean usePersonalizedDicts,
+            final boolean forceReloadMainDictionary,
+            @Nullable final String account,
+            final String dictNamePrefix,
+            @Nullable final DictionaryInitializationListener listener);
+
+    /** Returns whether the loaded languages equal {@code locales}, in order. */
+    boolean isForLocales(final List<Locale> locales);
 
     @UsedForTesting
     void resetDictionariesForTesting(
