@@ -20,7 +20,7 @@ public final class MultilingualLocaleSelector {
 
     /**
      * Keeps every enabled input style that shares the current layout and script and has a
-     * main dictionary. The current style's own entry in {@code enabled} is skipped silently.
+     * main dictionary. Locales already active are skipped silently.
      */
     public static LocaleSelection select(final LocaleCandidate current,
             final List<LocaleCandidate> enabled) {
@@ -28,20 +28,21 @@ public final class MultilingualLocaleSelector {
         final Map<Locale, SkipReason> skipped = new LinkedHashMap<>();
         active.add(current.locale());
         for (final LocaleCandidate candidate : enabled) {
-            if (candidate.locale().equals(current.locale())) continue;
-            final SkipReason reason = rejectionReason(current, candidate, active);
+            if (active.contains(candidate.locale())) continue;
+            final SkipReason reason = rejectionReason(current, candidate);
             if (reason != null) {
                 skipped.put(candidate.locale(), reason);
                 continue;
             }
             active.add(candidate.locale());
         }
+        // A locale reached through another, compatible input style is active, not skipped.
+        skipped.keySet().removeAll(active);
         return new LocaleSelection(active, skipped);
     }
 
     private static SkipReason rejectionReason(final LocaleCandidate current,
-            final LocaleCandidate candidate, final List<Locale> active) {
-        if (active.contains(candidate.locale())) return SkipReason.DUPLICATE;
+            final LocaleCandidate candidate) {
         if (!candidate.layoutSet().equals(current.layoutSet())) return SkipReason.LAYOUT_MISMATCH;
         if (candidate.script() != current.script()) return SkipReason.SCRIPT_MISMATCH;
         if (!candidate.hasMainDictionary()) return SkipReason.NO_DICTIONARY;

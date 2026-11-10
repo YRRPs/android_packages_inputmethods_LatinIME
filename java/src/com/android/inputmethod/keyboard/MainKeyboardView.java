@@ -565,8 +565,6 @@ public final class MainKeyboardView extends KeyboardView implements DrawingProxy
         mGestureTrailsDrawingPreview.setPreviewPosition(tracker);
     }
 
-    // Note that this method is called from a non-UI thread.
-    @SuppressWarnings("static-method")
     /** Shows the languages typed together on the space bar, or the stock label when null. */
     public void setMultilingualLabel(@Nullable final String label) {
         if (TextUtils.equals(mMultilingualLabel, label)) {
@@ -576,6 +574,8 @@ public final class MainKeyboardView extends KeyboardView implements DrawingProxy
         invalidateAllKeys();
     }
 
+    // Note that this method is called from a non-UI thread.
+    @SuppressWarnings("static-method")
     public void setMainDictionaryAvailability(final boolean mainDictionaryAvailable) {
         PointerTracker.setMainDictionaryAvailability(mainDictionaryAvailable);
     }

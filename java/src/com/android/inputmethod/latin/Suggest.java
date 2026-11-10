@@ -26,6 +26,7 @@ import com.android.inputmethod.latin.SuggestedWords.SuggestedWordInfo;
 import com.android.inputmethod.latin.common.Constants;
 import com.android.inputmethod.latin.common.StringUtils;
 import com.android.inputmethod.latin.define.DebugFlags;
+import com.android.inputmethod.latin.multilingual.MultilingualAutocorrectGuard;
 import com.android.inputmethod.latin.settings.SettingsValuesForSuggestion;
 import com.android.inputmethod.latin.utils.AutoCorrectionUtils;
 import com.android.inputmethod.latin.utils.BinaryDictionaryUtils;
@@ -147,6 +148,14 @@ public final class Suggest {
         return firstSuggestedWordInfo;
     }
 
+    private boolean isValidInAnotherActiveLanguage(final String consideredWord,
+            final WordComposer wordComposer, final Locale locale) {
+        return MultilingualAutocorrectGuard.blocksAutocorrection(
+                mDictionaryFacilitator.isMultilingual(), consideredWord,
+                wordComposer.isOrWillBeOnlyFirstCharCapitalized(), locale,
+                mDictionaryFacilitator::isValidSuggestionWord);
+    }
+
     // Retrieves suggestions for non-batch input (typing, recorrection, predictions...)
     // and calls the callback function with the suggestions.
     private void getSuggestedWordsForNonBatchInput(final WordComposer wordComposer,
@@ -227,7 +236,9 @@ public final class Suggest {
                 // If the first suggestion is a shortcut we never auto-correct to it, regardless
                 // of how strong it is (allowlist entries are not KIND_SHORTCUT but KIND_WHITELIST).
                 // TODO: we may want to have shortcut-only entries auto-correct in the future.
-                || suggestionResults.first().isKindOf(SuggestedWordInfo.KIND_SHORTCUT)) {
+                || suggestionResults.first().isKindOf(SuggestedWordInfo.KIND_SHORTCUT)
+                // With several languages active, a word any of them knows is never replaced.
+                || isValidInAnotherActiveLanguage(consideredWord, wordComposer, locale)) {
             hasAutoCorrection = false;
         } else {
             final SuggestedWordInfo firstSuggestion = suggestionResults.first();

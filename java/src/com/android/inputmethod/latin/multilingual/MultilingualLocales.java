@@ -35,8 +35,13 @@ public final class MultilingualLocales {
     public static LocaleSelection compute(final RichInputMethodManager imm, final Resources res,
             final Locale currentLocale) {
         try {
+            final RichInputMethodSubtype currentSubtype = imm.getCurrentSubtype();
+            // "No language" styles type without dictionaries; mixing languages makes no sense.
+            if (currentSubtype.isNoLanguage()) {
+                return LocaleSelection.single(currentLocale);
+            }
             final LocaleCandidate current =
-                    toCandidate(res, imm.getCurrentSubtype().getRawSubtype(), currentLocale);
+                    toCandidate(res, currentSubtype.getRawSubtype(), currentLocale);
             final List<LocaleCandidate> enabled = new ArrayList<>();
             for (final InputMethodSubtype subtype
                     : imm.getMyEnabledInputMethodSubtypeList(true /* implicit */)) {
@@ -51,6 +56,7 @@ public final class MultilingualLocales {
     }
 
     // RichInputMethodSubtype#getLocale applies the same locale mapping the facilitator sees.
+    // Only dictionaries bundled in the APK count; this ROM ships no dictionary pack.
     private static LocaleCandidate toCandidate(final Resources res,
             final InputMethodSubtype subtype, final Locale locale) {
         return new LocaleCandidate(locale,

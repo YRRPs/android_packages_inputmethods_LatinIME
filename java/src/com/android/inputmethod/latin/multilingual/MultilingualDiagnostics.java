@@ -34,9 +34,17 @@ public final class MultilingualDiagnostics {
         mClock = clock;
     }
 
-    /** Installs a new language set, resets suggestion timing and records the rebuild. */
+    /**
+     * Installs the language selection. Only a changed set of active languages resets suggestion
+     * timing and records a rebuild, so re-entering a text field keeps the measurements.
+     */
     public synchronized void setSelection(final LocaleSelection selection) {
+        final boolean sameLanguages =
+                mSelection != null && mSelection.active().equals(selection.active());
         mSelection = selection;
+        if (sameLanguages) {
+            return;
+        }
         mLastSuggestionMs = 0;
         mMaxSuggestionMs = 0;
         if (selection.selectorFailed()) {

@@ -59,11 +59,11 @@ public class MultilingualLocaleSelectorTest {
     }
 
     @Test
-    public void skipsDuplicateLocale() {
+    public void duplicateLocaleIsActiveOnce() {
         final LocaleSelection s = MultilingualLocaleSelector.select(c(EN_US, QWERTY, LATIN, true),
                 Arrays.asList(c(FR, QWERTY, LATIN, true), c(FR, QWERTY, LATIN, true)));
         assertEquals(Arrays.asList(EN_US, FR), s.active());
-        assertEquals(SkipReason.DUPLICATE, s.skipped().get(FR));
+        assertTrue(s.skipped().isEmpty());
     }
 
     @Test
@@ -89,5 +89,14 @@ public class MultilingualLocaleSelectorTest {
         assertEquals(Collections.singletonList(EN_US), s.active());
         assertTrue(s.selectorFailed());
         assertEquals(SkipReason.SELECTOR_FAILED, s.skipped().get(EN_US));
+    }
+
+    @Test
+    public void activeLocaleIsNeverAlsoSkipped() {
+        final LocaleSelection s = MultilingualLocaleSelector.select(c(EN_US, QWERTY, LATIN, true),
+                Arrays.asList(c(FR, "azerty", LATIN, true), c(FR, QWERTY, LATIN, true),
+                        c(FR, "azerty", LATIN, true)));
+        assertEquals(Arrays.asList(EN_US, FR), s.active());
+        assertTrue(s.skipped().isEmpty());
     }
 }

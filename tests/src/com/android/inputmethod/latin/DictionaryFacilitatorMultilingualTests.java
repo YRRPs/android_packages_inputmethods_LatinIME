@@ -33,12 +33,24 @@ import java.util.Collections;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * Multilingual facilitator behaviour with real main dictionaries.
+ *
+ * The "ZZ" country makes the user history files private to this test: UserHistoryDictionary
+ * ignores the name prefix and keys its file by locale, so real locales would read and clear the
+ * device owner's learned words. en_ZZ and fr_ZZ still load main_en and main_fr by fallback.
+ */
 @LargeTest
 @RunWith(AndroidJUnit4.class)
 public class DictionaryFacilitatorMultilingualTests {
-    private static final String PREFIX = "test_multilingual_";
+    private static final Locale EN_TEST = new Locale("en", "ZZ");
+    private static final Locale FR_TEST = new Locale("fr", "ZZ");
     private static final long LOAD_TIMEOUT_SECONDS = 10;
+    // Common French words with no English homograph.
+    private static final String[] FRENCH_WORDS = { "pourquoi", "beaucoup" };
+    private static final String[] ENGLISH_WORDS = { "house", "water", "because", "window" };
 
+    private Context mContext;
     private DictionaryFacilitatorImpl mFacilitator;
 
     private static LocaleCandidate qwerty(final Locale locale) {
@@ -46,57 +58,80 @@ public class DictionaryFacilitatorMultilingualTests {
     }
 
     private static LocaleSelection englishAndFrench() {
-        return MultilingualLocaleSelector.select(qwerty(Locale.US),
-                Arrays.asList(qwerty(Locale.US), qwerty(Locale.FRENCH)));
+        return MultilingualLocaleSelector.select(qwerty(EN_TEST),
+                Arrays.asList(qwerty(EN_TEST), qwerty(FR_TEST)));
+    }
+
+    private void reset() throws InterruptedException {
+        mFacilitator.resetDictionaries(mContext, englishAndFrench(), false /* contacts */,
+                true /* personalized */, false /* forceReload */, null /* account */,
+                "" /* prefix */, null /* listener */);
+        mFacilitator.waitForLoadingDictionariesForTesting(LOAD_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+    }
+
+    private void commit(final String word) throws InterruptedException {
+        mFacilitator.addToUserHistory(word, false, NgramContext.BEGINNING_OF_SENTENCE, 0, false);
+        mFacilitator.waitForLoadingDictionariesForTesting(LOAD_TIMEOUT_SECONDS, TimeUnit.SECONDS);
     }
 
     @Before
     public void setUp() throws InterruptedException {
-        final Context context = InstrumentationRegistry.getTargetContext();
+        mContext = InstrumentationRegistry.getTargetContext();
         mFacilitator = new DictionaryFacilitatorImpl();
-        mFacilitator.resetDictionaries(context, englishAndFrench(), false /* contacts */,
-                true /* personalized */, false /* forceReload */, null /* account */, PREFIX,
-                null /* listener */);
-        mFacilitator.waitForLoadingDictionariesForTesting(LOAD_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        reset();
+        mFacilitator.clearUserHistoryDictionary(mContext);
     }
 
     @After
     public void tearDown() {
-        mFacilitator.clearUserHistoryDictionary(InstrumentationRegistry.getTargetContext());
+        mFacilitator.clearUserHistoryDictionary(mContext);
         mFacilitator.closeDictionaries();
     }
 
     @Test
     public void validInEitherLanguageIsValidSuggestionWord() {
-        assertTrue(mFacilitator.isValidSuggestionWord("bonjour"));
-        assertTrue(mFacilitator.isValidSuggestionWord("hello"));
+        assertTrue(mFacilitator.isMultilingual());
+        assertTrue(mFacilitator.isValidSuggestionWord("pourquoi"));
+        assertTrue(mFacilitator.isValidSuggestionWord("house"));
     }
 
     @Test
-    public void frenchWordsMakeFrenchPreferred() {
-        mFacilitator.addToUserHistory("bonjour", false, NgramContext.BEGINNING_OF_SENTENCE, 0,
-                false);
-        mFacilitator.addToUserHistory("merci", false, NgramContext.BEGINNING_OF_SENTENCE, 0,
-                false);
-        assertEquals(Locale.FRENCH, mFacilitator.getPreferredLocaleForTesting());
+    public void frenchWordsMakeFrenchPreferred() throws InterruptedException {
+        for (final String word : FRENCH_WORDS) commit(word);
+        assertEquals(FR_TEST, mFacilitator.getPreferredLocaleForTesting());
     }
 
     @Test
     public void mainLanguageStaysPreferredOnTie() {
-        assertEquals(Locale.US, mFacilitator.getPreferredLocaleForTesting());
+        assertEquals(EN_TEST, mFacilitator.getPreferredLocaleForTesting());
+    }
+
+    @Test
+    public void firstFrenchWordAfterEnglishIsLearnedInFrench() throws InterruptedException {
+        for (final String word : ENGLISH_WORDS) commit(word);
+        commit(FRENCH_WORDS[0]);
+        assertTrue(mFacilitator.isInUserHistoryForTesting(FR_TEST, FRENCH_WORDS[0]));
+        assertFalse(mFacilitator.isInUserHistoryForTesting(EN_TEST, FRENCH_WORDS[0]));
+    }
+
+    @Test
+    public void confidenceSurvivesResetWithSameLanguages() throws InterruptedException {
+        for (final String word : FRENCH_WORDS) commit(word);
+        reset();
+        assertEquals(FR_TEST, mFacilitator.getPreferredLocaleForTesting());
     }
 
     @Test
     public void isForLocalesComparesOrderedList() {
-        assertTrue(mFacilitator.isForLocales(Arrays.asList(Locale.US, Locale.FRENCH)));
-        assertFalse(mFacilitator.isForLocales(Arrays.asList(Locale.FRENCH, Locale.US)));
-        assertFalse(mFacilitator.isForLocales(Collections.singletonList(Locale.US)));
+        assertTrue(mFacilitator.isForLocales(Arrays.asList(EN_TEST, FR_TEST)));
+        assertFalse(mFacilitator.isForLocales(Arrays.asList(FR_TEST, EN_TEST)));
+        assertFalse(mFacilitator.isForLocales(Collections.singletonList(EN_TEST)));
     }
 
     @Test
     public void dumpListsBothLanguages() {
-        final String dump = mFacilitator.dump(InstrumentationRegistry.getTargetContext());
-        assertTrue(dump, dump.contains("activeLocales=en_US,fr"));
-        assertTrue(dump, dump.contains("locale=fr confidence=1"));
+        final String dump = mFacilitator.dump(mContext);
+        assertTrue(dump, dump.contains("activeLocales=en_ZZ,fr_ZZ"));
+        assertTrue(dump, dump.contains("locale=fr_ZZ confidence=1 weight=0.90 load=loaded"));
     }
 }

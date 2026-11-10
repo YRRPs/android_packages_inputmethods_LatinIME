@@ -20,7 +20,8 @@ public final class LanguageConfidence {
     private static final float BASE_WEIGHT = 8f;
     private static final float WEIGHT_DIVISOR = 10f;
 
-    private int mValue = INITIAL;
+    // Written on the UI thread, read on the suggestion thread.
+    private volatile int mValue = INITIAL;
 
     /** Records a committed word this language knows. Climbs past MAX on purpose. */
     public void recordKnownWord() {
@@ -36,6 +37,11 @@ public final class LanguageConfidence {
         if (mValue > MIN) {
             mValue--;
         }
+    }
+
+    /** Takes over another instance's value, used when a reset keeps the same languages. */
+    public void copyFrom(final LanguageConfidence other) {
+        mValue = other.mValue;
     }
 
     public int value() {

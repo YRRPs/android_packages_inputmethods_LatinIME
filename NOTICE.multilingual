@@ -9,6 +9,7 @@ later. The following files contain code derived from that pull request and
 are therefore distributed under GPL-3.0-or-later (see LICENSE.GPL-3.0):
 
 - java/src/com/android/inputmethod/latin/DictionaryFacilitatorImpl.java
+- java/src/com/android/inputmethod/latin/DictionaryGroup.java
 - java/src/com/android/inputmethod/latin/multilingual/LanguageConfidence.java
 
 As a combined work, the LatinIME build that includes these files is

@@ -79,7 +79,7 @@ public class MultilingualDiagnosticsTest {
         d.recordSuggestionMs(11);
         d.recordSuggestionMs(4);
         assertTrue(emptyDump(d).contains("lastSuggestionMs=4 maxSuggestionMs=11"));
-        d.setSelection(LocaleSelection.single(FR));
+        d.setSelection(LocaleSelection.single(EN_US));
         assertTrue(emptyDump(d).contains("lastSuggestionMs=0 maxSuggestionMs=0"));
     }
 
@@ -103,5 +103,19 @@ public class MultilingualDiagnosticsTest {
         final String dump = emptyDump(d);
         assertTrue(dump, dump.contains("SELECTOR_FAILED fr"));
         assertTrue(dump, dump.contains("skipped=fr:selectorFailed"));
+    }
+
+    @Test
+    public void sameActiveSetKeepsTimingAndRecordsNoRebuild() {
+        final MultilingualDiagnostics d = newDiagnostics();
+        d.setSelection(selectionWithSkip());
+        d.recordSuggestionMs(7);
+        mNow = 2000;
+        d.setSelection(new LocaleSelection(Arrays.asList(FR, EN_US),
+                Collections.<Locale, SkipReason>emptyMap()));
+        final String dump = emptyDump(d);
+        assertTrue(dump, dump.contains("lastSuggestionMs=7 maxSuggestionMs=7"));
+        assertFalse(dump, dump.contains("+2000ms LANGUAGE_SET_REBUILT"));
+        assertFalse(dump, dump.contains("skipped=de:layoutMismatch"));
     }
 }

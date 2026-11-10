@@ -136,6 +136,9 @@ public interface DictionaryFacilitator {
             final String dictNamePrefix,
             @Nullable final DictionaryInitializationListener listener);
 
+    /** Returns whether more than one language is loaded. */
+    boolean isMultilingual();
+
     /** Returns whether the loaded languages equal {@code locales}, in order. */
     boolean isForLocales(final List<Locale> locales);
 

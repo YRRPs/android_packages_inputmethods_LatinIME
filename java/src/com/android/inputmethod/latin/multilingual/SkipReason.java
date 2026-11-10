@@ -12,7 +12,6 @@ package com.android.inputmethod.latin.multilingual;
 public enum SkipReason {
     LAYOUT_MISMATCH("layoutMismatch"),
     SCRIPT_MISMATCH("scriptMismatch"),
-    DUPLICATE("duplicate"),
     NO_DICTIONARY("noDictionary"),
     SELECTOR_FAILED("selectorFailed");
 

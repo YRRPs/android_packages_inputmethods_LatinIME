@@ -1,5 +1,5 @@
 /*
-7 * Copyright (C) 2013 The Android Open Source Project
+ * Copyright (C) 2013 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,6 +12,9 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modifications Copyright (C) 2026 YRRPs, based on OpenBoard PR #565 and licensed under
+ * GPL-3.0-or-later. See NOTICE.multilingual.
  */
 
 package com.android.inputmethod.latin;
@@ -111,16 +114,20 @@ public class DictionaryFacilitatorImpl implements DictionaryFacilitator {
         @Nullable final String mAccount;
         final String mDictNamePrefix;
         final List<DictionaryGroup> mOldGroups;
+        // Confidence survives a reset only when the set of languages is unchanged.
+        final boolean mKeepConfidence;
 
         GroupRequest(final Context context, final Set<String> subDictTypes,
                 final boolean forceReloadMainDictionary, @Nullable final String account,
-                final String dictNamePrefix, final List<DictionaryGroup> oldGroups) {
+                final String dictNamePrefix, final List<DictionaryGroup> oldGroups,
+                final boolean keepConfidence) {
             mContext = context;
             mSubDictTypes = subDictTypes;
             mForceReloadMainDictionary = forceReloadMainDictionary;
             mAccount = account;
             mDictNamePrefix = dictNamePrefix;
             mOldGroups = oldGroups;
+            mKeepConfidence = keepConfidence;
         }
     }
 
@@ -179,6 +186,11 @@ public class DictionaryFacilitatorImpl implements DictionaryFacilitator {
             }
         }
         return true;
+    }
+
+    @Override
+    public boolean isMultilingual() {
+        return mDictionaryGroups.size() > 1;
     }
 
     /**
@@ -279,10 +291,11 @@ public class DictionaryFacilitatorImpl implements DictionaryFacilitator {
             @Nullable final String account,
             final String dictNamePrefix,
             @Nullable final DictionaryInitializationListener listener) {
+        final List<Locale> locales = selection.active();
         final GroupRequest request = new GroupRequest(context,
                 subDictTypesToUse(context, useContactsDict, usePersonalizedDicts),
-                forceReloadMainDictionary, account, dictNamePrefix, mDictionaryGroups);
-        final List<Locale> locales = selection.active();
+                forceReloadMainDictionary, account, dictNamePrefix, mDictionaryGroups,
+                isForLocales(locales));
         final List<DictionaryGroup> newGroups = new ArrayList<>(locales.size());
         for (int i = 0; i < locales.size(); i++) {
             newGroups.add(buildGroup(request, locales.get(i), i == 0));
@@ -340,7 +353,10 @@ public class DictionaryFacilitatorImpl implements DictionaryFacilitator {
         }
         final DictionaryGroup group =
                 new DictionaryGroup(locale, mainDict, request.mAccount, subDicts);
-        if (mainDict != null) {
+        if (request.mKeepConfidence && existing != null) {
+            group.mConfidence.copyFrom(existing.mConfidence);
+        }
+        if (mainDict != null && mainDict.isInitialized()) {
             group.mLoadState = LoadState.LOADED;
         }
         return group;
@@ -408,6 +424,8 @@ public class DictionaryFacilitatorImpl implements DictionaryFacilitator {
         try {
             for (final DictionaryGroup group : mDictionaryGroups) {
                 if (group.mLocale == null || hasInitializedMainDictionary(group)) continue;
+                // A reset may have replaced the groups since this snapshot was taken.
+                if (!mDictionaryGroups.contains(group)) continue;
                 loadMainDictionary(context, group);
             }
             if (listener != null) {
@@ -502,8 +520,19 @@ public class DictionaryFacilitatorImpl implements DictionaryFacilitator {
     }
 
     @UsedForTesting
+    boolean isInUserHistoryForTesting(final Locale locale, final String word) {
+        final DictionaryGroup group = findDictionaryGroupWithLocale(mDictionaryGroups, locale);
+        if (group == null) {
+            return false;
+        }
+        final ExpandableBinaryDictionary history =
+                group.getSubDict(Dictionary.TYPE_USER_HISTORY);
+        return history != null && history.isInDictionary(word);
+    }
+
+    @UsedForTesting
     Locale getPreferredLocaleForTesting() {
-        return preferredGroup().mLocale;
+        return mostConfident(mDictionaryGroups).mLocale;
     }
 
     private static boolean hasInitializedMainDictionary(final DictionaryGroup group) {
@@ -551,10 +580,7 @@ public class DictionaryFacilitatorImpl implements DictionaryFacilitator {
         putWordIntoValidSpellingWordCache("addToUserHistory", suggestion);
 
         final String[] words = suggestion.split(Constants.WORD_SEPARATOR);
-        if (mDictionaryGroups.size() > 1 && words.length == 1) {
-            updateConfidences(suggestion, wasAutoCapitalized);
-        }
-        final DictionaryGroup learningGroup = preferredGroup();
+        final DictionaryGroup learningGroup = learningGroup(words, wasAutoCapitalized);
         NgramContext ngramContextForCurrentWord = ngramContext;
         for (int i = 0; i < words.length; i++) {
             final String currentWord = words[i];
@@ -567,17 +593,51 @@ public class DictionaryFacilitatorImpl implements DictionaryFacilitator {
         }
     }
 
-    /** Raises the confidence of every language that knows the word and lowers the rest. */
-    private void updateConfidences(final String word, final boolean wasAutoCapitalized) {
-        final DictionaryGroup before = preferredGroup();
-        for (final DictionaryGroup group : mDictionaryGroups) {
+    /**
+     * Updates confidences for a single committed word and returns the group that learns it:
+     * the most confident language that knows the word, else the most confident language.
+     */
+    private DictionaryGroup learningGroup(final String[] words,
+            final boolean wasAutoCapitalized) {
+        final List<DictionaryGroup> groups = mDictionaryGroups;
+        if (groups.size() == 1 || words.length != 1) {
+            return mostConfident(groups);
+        }
+        final List<DictionaryGroup> knowing = groupsKnowing(groups, words[0], wasAutoCapitalized);
+        updateConfidences(groups, knowing);
+        if (knowing.isEmpty()) {
+            return mostConfident(groups);
+        }
+        return mostConfident(knowing);
+    }
+
+    private static List<DictionaryGroup> groupsKnowing(final List<DictionaryGroup> groups,
+            final String word, final boolean wasAutoCapitalized) {
+        final List<DictionaryGroup> knowing = new ArrayList<>();
+        for (final DictionaryGroup group : groups) {
             if (isKnownWord(group, word, wasAutoCapitalized)) {
+                knowing.add(group);
+            }
+        }
+        return knowing;
+    }
+
+    /**
+     * Raises the confidence of every language that knows the word and lowers the rest. A
+     * language whose main dictionary is not loaded yet is left alone: it cannot know anything.
+     */
+    private void updateConfidences(final List<DictionaryGroup> groups,
+            final List<DictionaryGroup> knowing) {
+        final DictionaryGroup before = mostConfident(groups);
+        for (final DictionaryGroup group : groups) {
+            if (knowing.contains(group)) {
                 group.mConfidence.recordKnownWord();
                 continue;
             }
+            if (group.mLoadState != LoadState.LOADED) continue;
             group.mConfidence.recordUnknownWord();
         }
-        final DictionaryGroup after = preferredGroup();
+        final DictionaryGroup after = mostConfident(groups);
         if (after != before) {
             mDiagnostics.record(MultilingualEvent.PREFERRED_CHANGED, after.mLocale);
         }
@@ -601,9 +661,8 @@ public class DictionaryFacilitatorImpl implements DictionaryFacilitator {
         return word.substring(0, firstEnd).toLowerCase(locale) + word.substring(firstEnd);
     }
 
-    /** The group with the highest confidence; the main group wins ties. */
-    private DictionaryGroup preferredGroup() {
-        final List<DictionaryGroup> groups = mDictionaryGroups;
+    /** The group with the highest confidence; the earliest group (main first) wins ties. */
+    private static DictionaryGroup mostConfident(final List<DictionaryGroup> groups) {
         DictionaryGroup best = groups.get(0);
         for (final DictionaryGroup group : groups) {
             if (group.mConfidence.value() > best.mConfidence.value()) {
@@ -779,8 +838,8 @@ public class DictionaryFacilitatorImpl implements DictionaryFacilitator {
     }
 
     /**
-     * True if any active language knows the word. Autocorrection checks this before replacing
-     * a typed word, so a word valid in any language is never corrected.
+     * True if any active language knows the word. With several languages active, Suggest uses
+     * this to refuse autocorrecting such a word (see MultilingualAutocorrectGuard).
      */
     public boolean isValidSuggestionWord(final String word) {
         return isValidWord(word, ALL_DICTIONARY_TYPES);

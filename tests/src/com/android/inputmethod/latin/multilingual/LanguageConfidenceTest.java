@@ -46,4 +46,13 @@ public class LanguageConfidenceTest {
         assertEquals(0, c.value());
         assertEquals(0.8f, c.weightFactor(), EPS);
     }
+
+    @Test
+    public void copyFromCarriesValueAcrossReset() {
+        final LanguageConfidence old = new LanguageConfidence();
+        for (int i = 0; i < 3; i++) old.recordKnownWord();
+        final LanguageConfidence fresh = new LanguageConfidence();
+        fresh.copyFrom(old);
+        assertEquals(4, fresh.value());
+    }
 }
