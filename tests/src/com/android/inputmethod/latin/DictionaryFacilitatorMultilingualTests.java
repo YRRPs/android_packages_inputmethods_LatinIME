@@ -70,7 +70,10 @@ public class DictionaryFacilitatorMultilingualTests {
     }
 
     private void commit(final String word) throws InterruptedException {
-        mFacilitator.addToUserHistory(word, false, NgramContext.BEGINNING_OF_SENTENCE, 0, false);
+        // A current timestamp: the forgetting curve drops entries dated at the epoch.
+        final long nowSeconds = TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis());
+        mFacilitator.addToUserHistory(word, false, NgramContext.BEGINNING_OF_SENTENCE,
+                nowSeconds, false);
         mFacilitator.waitForLoadingDictionariesForTesting(LOAD_TIMEOUT_SECONDS, TimeUnit.SECONDS);
     }
 

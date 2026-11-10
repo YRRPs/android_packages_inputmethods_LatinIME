@@ -2072,6 +2072,17 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
 
     // DO NOT USE THIS for any other purpose than testing. This can break the keyboard badly.
     @UsedForTesting
+    void replaceDictionariesForTest(final LocaleSelection selection) {
+        final SettingsValues settingsValues = mSettings.getCurrent();
+        mDictionaryFacilitator.resetDictionaries(this, selection,
+            settingsValues.mUseContactsDict, settingsValues.mUsePersonalizedDicts,
+            false /* forceReloadMainDictionary */,
+            settingsValues.mAccount, "", /* dictionaryNamePrefix */
+            this /* DictionaryInitializationListener */);
+    }
+
+    // DO NOT USE THIS for any other purpose than testing. This can break the keyboard badly.
+    @UsedForTesting
     void replaceDictionariesForTest(final Locale locale) {
         final SettingsValues settingsValues = mSettings.getCurrent();
         mDictionaryFacilitator.resetDictionaries(this, locale,
