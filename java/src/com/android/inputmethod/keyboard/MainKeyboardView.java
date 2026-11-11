@@ -122,6 +122,7 @@ public final class MainKeyboardView extends KeyboardView implements DrawingProxy
     private final int mLanguageOnSpacebarFinalAlpha;
     private ObjectAnimator mLanguageOnSpacebarFadeoutAnimator;
     private int mLanguageOnSpacebarFormatType;
+    @Nullable private String mMultilingualLabel;
     private boolean mHasMultipleEnabledIMEsOrSubtypes;
     private int mLanguageOnSpacebarAnimAlpha = Constants.Color.ALPHA_OPAQUE;
     private final float mLanguageOnSpacebarTextRatio;
@@ -564,6 +565,15 @@ public final class MainKeyboardView extends KeyboardView implements DrawingProxy
         mGestureTrailsDrawingPreview.setPreviewPosition(tracker);
     }
 
+    /** Shows the languages typed together on the space bar, or the stock label when null. */
+    public void setMultilingualLabel(@Nullable final String label) {
+        if (TextUtils.equals(mMultilingualLabel, label)) {
+            return;
+        }
+        mMultilingualLabel = label;
+        invalidateAllKeys();
+    }
+
     // Note that this method is called from a non-UI thread.
     @SuppressWarnings("static-method")
     public void setMainDictionaryAvailability(final boolean mainDictionaryAvailable) {
@@ -844,6 +854,9 @@ public final class MainKeyboardView extends KeyboardView implements DrawingProxy
     private String layoutLanguageOnSpacebar(final Paint paint,
             final RichInputMethodSubtype subtype, final int width) {
         // Choose appropriate language name to fit into the width.
+        if (mMultilingualLabel != null && fitsTextIntoWidth(width, mMultilingualLabel, paint)) {
+            return mMultilingualLabel;
+        }
         if (mLanguageOnSpacebarFormatType == LanguageOnSpacebarUtils.FORMAT_TYPE_FULL_LOCALE) {
             final String fullText = subtype.getFullDisplayName();
             if (fitsTextIntoWidth(width, fullText, paint)) {

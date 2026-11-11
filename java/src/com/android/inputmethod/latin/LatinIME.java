@@ -85,6 +85,9 @@ import com.android.inputmethod.latin.common.InputPointers;
 import com.android.inputmethod.latin.define.DebugFlags;
 import com.android.inputmethod.latin.define.ProductionFlags;
 import com.android.inputmethod.latin.inputlogic.InputLogic;
+import com.android.inputmethod.latin.multilingual.LocaleSelection;
+import com.android.inputmethod.latin.multilingual.MultilingualLabel;
+import com.android.inputmethod.latin.multilingual.MultilingualLocales;
 import com.android.inputmethod.latin.permissions.PermissionsManager;
 import com.android.inputmethod.latin.personalization.PersonalizationHelper;
 import com.android.inputmethod.latin.settings.Settings;
@@ -154,6 +157,8 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
     private final DictionaryFacilitator mDictionaryFacilitator =
             DictionaryFacilitatorProvider.getDictionaryFacilitator(
                     false /* isNeededForSpellChecking */);
+    // Languages last loaded into mDictionaryFacilitator; null until the first reset.
+    @Nullable private LocaleSelection mLocaleSelection;
     final InputLogic mInputLogic = new InputLogic(this /* LatinIME */,
             this /* SuggestionStripViewAccessor */, mDictionaryFacilitator);
     // We expect to have only one decoder in almost all cases, hence the default capacity of 1.
@@ -679,7 +684,8 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
         // been displayed. Opening dictionaries never affects responsivity as dictionaries are
         // asynchronously loaded.
         if (!mHandler.hasPendingReopenDictionaries()) {
-            resetDictionaryFacilitator(locale);
+            resetDictionaryFacilitator(
+                    MultilingualLocales.compute(mRichImm, getResources(), locale));
         }
         refreshPersonalizationDictionarySession(currentSettingsValues);
         resetDictionaryFacilitatorIfNecessary();
@@ -721,27 +727,31 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
         } else {
             subtypeLocale = subtypeSwitcherLocale;
         }
-        if (mDictionaryFacilitator.isForLocale(subtypeLocale)
+        final LocaleSelection selection =
+                MultilingualLocales.compute(mRichImm, getResources(), subtypeLocale);
+        if (mDictionaryFacilitator.isForLocales(selection.active())
                 && mDictionaryFacilitator.isForAccount(mSettings.getCurrent().mAccount)) {
             return;
         }
-        resetDictionaryFacilitator(subtypeLocale);
+        resetDictionaryFacilitator(selection);
     }
 
     /**
-     * Reset the facilitator by loading dictionaries for the given locale and
+     * Reset the facilitator by loading dictionaries for every language of the selection and
      * the current settings values.
      *
-     * @param locale the locale
+     * @param selection the languages typed together, main language first
      */
     // TODO: make sure the current settings always have the right locales, and read from them.
-    private void resetDictionaryFacilitator(final Locale locale) {
+    private void resetDictionaryFacilitator(final LocaleSelection selection) {
         final SettingsValues settingsValues = mSettings.getCurrent();
-        mDictionaryFacilitator.resetDictionaries(this /* context */, locale,
+        mDictionaryFacilitator.resetDictionaries(this /* context */, selection,
                 settingsValues.mUseContactsDict, settingsValues.mUsePersonalizedDicts,
                 false /* forceReloadMainDictionary */,
                 settingsValues.mAccount, "" /* dictNamePrefix */,
                 this /* DictionaryInitializationListener */);
+        mLocaleSelection = selection;
+        updateMultilingualLabel();
         if (settingsValues.mAutoCorrectionEnabledPerUserSettings) {
             mInputLogic.mSuggest.setAutoCorrectionThreshold(
                     settingsValues.mAutoCorrectionThreshold);
@@ -768,11 +778,29 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
     /* package private */ void resetSuggestMainDict() {
         final SettingsValues settingsValues = mSettings.getCurrent();
         mDictionaryFacilitator.resetDictionaries(this /* context */,
-                mDictionaryFacilitator.getLocale(), settingsValues.mUseContactsDict,
+                selectionForMainDictReload(), settingsValues.mUseContactsDict,
                 settingsValues.mUsePersonalizedDicts,
                 true /* forceReloadMainDictionary */,
                 settingsValues.mAccount, "" /* dictNamePrefix */,
                 this /* DictionaryInitializationListener */);
+    }
+
+    // Keeps every active language when main dictionaries reload, e.g. after a dictionary update.
+    private LocaleSelection selectionForMainDictReload() {
+        final LocaleSelection last = mLocaleSelection;
+        if (last != null && mDictionaryFacilitator.isForLocales(last.active())) {
+            return last;
+        }
+        return LocaleSelection.single(mDictionaryFacilitator.getLocale());
+    }
+
+    private void updateMultilingualLabel() {
+        final LocaleSelection selection = mLocaleSelection;
+        final MainKeyboardView mainKeyboardView = mKeyboardSwitcher.getMainKeyboardView();
+        if (selection == null || mainKeyboardView == null) {
+            return;
+        }
+        mainKeyboardView.setMultilingualLabel(MultilingualLabel.format(selection.active()));
     }
 
     @Override
@@ -868,8 +896,11 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
     @Override
     public View onCreateInputView() {
         StatsUtils.onCreateInputView();
-        return mKeyboardSwitcher.onCreateInputView(mDisplayContext,
+        final View inputView = mKeyboardSwitcher.onCreateInputView(mDisplayContext,
                 mIsHardwareAcceleratedDrawingEnabled);
+        // The dictionaries can be reset before the keyboard view exists.
+        updateMultilingualLabel();
+        return inputView;
     }
 
     @Override
@@ -2037,6 +2068,17 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
     void waitForLoadingDictionaries(final long timeout, final TimeUnit unit)
             throws InterruptedException {
         mDictionaryFacilitator.waitForLoadingDictionariesForTesting(timeout, unit);
+    }
+
+    // DO NOT USE THIS for any other purpose than testing. This can break the keyboard badly.
+    @UsedForTesting
+    void replaceDictionariesForTest(final LocaleSelection selection) {
+        final SettingsValues settingsValues = mSettings.getCurrent();
+        mDictionaryFacilitator.resetDictionaries(this, selection,
+            settingsValues.mUseContactsDict, settingsValues.mUsePersonalizedDicts,
+            false /* forceReloadMainDictionary */,
+            settingsValues.mAccount, "", /* dictionaryNamePrefix */
+            this /* DictionaryInitializationListener */);
     }
 
     // DO NOT USE THIS for any other purpose than testing. This can break the keyboard badly.

@@ -1,0 +1,18 @@
+Multilingual typing
+
+The multilingual typing feature in this fork is based on OpenBoard pull
+request #565, "Add multilingual typing", by Helium314:
+https://github.com/openboard-team/openboard/pull/565 (head df421183c301).
+
+OpenBoard is licensed under the GNU General Public License, version 3 or
+later. The following files contain code derived from that pull request and
+are therefore distributed under GPL-3.0-or-later (see LICENSE.GPL-3.0):
+
+- java/src/com/android/inputmethod/latin/DictionaryFacilitatorImpl.java
+- java/src/com/android/inputmethod/latin/DictionaryGroup.java
+- java/src/com/android/inputmethod/latin/multilingual/LanguageConfidence.java
+
+As a combined work, the LatinIME build that includes these files is
+distributed under GPL-3.0-or-later. The remaining files keep the license
+stated in their headers (Apache-2.0 for AOSP files, GPL-3.0-or-later for
+files added by YRRPs).
